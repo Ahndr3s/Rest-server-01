@@ -1,46 +1,77 @@
-const {response, request} = require('express')
+const { response, request } = require('express')
+const bcryptjs = require('bcryptjs')
 
-const usersGet = (req = request, res = response) => {
+const User = require('../models/user')
 
-    const {q, name='no name', apikey, page=3, limit} = req.query
+const usersGet = async(req = request, res = response) => {
+
+    //OPTIONAL ARGUMENTS
+    const { limit = 5, from = 0 } = req.query
+    // EXTRACTING AL RECORDS WITH status: true
+    const queryFilter = {status: true}
+
+
+    // EXECUTE BOTH PROMISES SIMULTANEOUSLY TO GET THE PROPER RESULT TO PRINT IT BELLOW
+    // ALSO IS IS FATSTER THAN MAKING BOTH SEPARETELLY
+    const [total, users] = await Promise.all([
+        User.countDocuments(queryFilter),
+        User.find(queryFilter)
+        .skip(Number(from))
+        .limit(Number(limit))
+    ])
 
     res.json({
-        ok: true,
-        msg: 'get API - controller',
-        q,
-        name,
-        apikey,
-        page,
-        limit
+        total,
+        users
     })
 }
 
-const userPut = (req, res = response) => {
-    const {id} = req.params;
-    
-    res.json({
-        ok: true,
-        msg: 'put API Petition',
-        id
-    })
+const userPut = async(req, res = response) => {
+    const { id } = req.params;
+    const { _id, password, google, email, ...whatsLeft } = req.body
+
+    // TODO VALIDATE AGAINST DATABASE
+    if(password){
+        // ENCRYPT PASSWORD
+        const salt = bcryptjs.genSaltSync()
+        whatsLeft.password = bcryptjs.hashSync(password, salt)
+    }
+
+    const userDb = await User.findOneAndUpdate(id, whatsLeft, {new:true})
+
+    res.json(userDb)
 }
 
-const userPost = (req, res = response) => { //Create a record
-    const {name, age} = req.body
+const userPost = async(req, res = response) => { //CREATE A RECORD
+
+    const {name, email, password, role} = req.body
+    const user = new User({name, email, password, role})
     
+    // ENCRYPT PASSWORD
+    const salt = bcryptjs.genSaltSync()
+    user.password = bcryptjs.hashSync(password, salt)
+
+    // SAVE RECORDING
+    await user.save()
+
     res.json({
-        ok: true,
         msg: 'post API Petition',
-        name,
-        age
+user
     })
 }
 
-const userDelete = (req, res = response) => {
-    res.json({
-        ok: true,
-        msg: 'delete API Petition'
-    })
+const userDelete = async(req, res = response) => {
+    const {id} =req.params
+    
+    // PHYSICAL DELITING
+    /* DONT DO IT IF THE USER CAN MANIPULATE THE DB SO WE
+       CAN KEEP THE REFERENCES TO IT'S MOVEMENTS */
+    // const deletedUser = await User.findByIdAndDelete(id)
+
+    // SYMBOLIC DELITING
+    const deletedUser = await User.findByIdAndUpdate(id, {status:false})
+    
+    res.json(deletedUser)
 }
 
 const userPatch = (req, res = response) => {
@@ -48,9 +79,9 @@ const userPatch = (req, res = response) => {
         ok: true,
         msg: 'patch API Petition'
     })
-  }
+}
 
 
 module.exports = {
-    usersGet, userPut, userPost, userDelete, userPatch 
+    usersGet, userPut, userPost, userDelete, userPatch
 }
